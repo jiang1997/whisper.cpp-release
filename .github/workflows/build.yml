@@ -58,6 +58,7 @@ jobs:
         shell: bash
         run: |
           VERSION=$(grep 'project.*whisper.cpp.*VERSION' whisper.cpp/CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+          if [ -z "$VERSION" ]; then echo "Could not extract version from whisper.cpp/CMakeLists.txt" >&2; exit 1; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       # ── Linux build ──────────────────────────────────────────────
@@ -93,6 +94,7 @@ jobs:
           cmake -S whisper.cpp -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
+            -DGGML_NATIVE=OFF \
             -DWHISPER_COREML=1
 
       # ── macOS Intel build ────────────────────────────────────────
@@ -102,6 +104,7 @@ jobs:
           cmake -S whisper.cpp -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
+            -DGGML_NATIVE=OFF \
             -DGGML_VULKAN=0 \
             -DGGML_METAL=0
 
@@ -124,12 +127,13 @@ jobs:
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}"
-          cp build/bin/Release/whisper-cli.exe "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
-          cp build/bin/Release/whisper-server.exe "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
-          cd release && tar -czf "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}.tar.gz" "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
+          $dir = "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}"
+          New-Item -ItemType Directory -Force -Path $dir
+          Copy-Item build/bin/Release/whisper-cli.exe $dir/
+          Copy-Item build/bin/Release/whisper-server.exe $dir/
+          Compress-Archive -Path $dir -DestinationPath "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -152,6 +156,7 @@ jobs:
         id: version
         run: |
           VERSION=$(grep 'project.*whisper.cpp.*VERSION' whisper.cpp/CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+          if [ -z "$VERSION" ]; then echo "Could not extract version from whisper.cpp/CMakeLists.txt" >&2; exit 1; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Download all artifacts

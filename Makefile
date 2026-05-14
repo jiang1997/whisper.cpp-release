@@ -10,6 +10,7 @@
 #   WHISPER_COREML=0 make build     # Disable CoreML on macOS ARM
 
 VERSION := $(shell grep 'project.*whisper.cpp.*VERSION' whisper.cpp/CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+$(if $(VERSION),,$(error Could not extract version from whisper.cpp/CMakeLists.txt))
 
 RELEASE_DIR := release
 BUILD_DIR := whisper.cpp/build
@@ -33,6 +34,7 @@ else ifeq ($(shell uname -s), Linux)
 	ARCH := $(shell uname -m)
 else ifeq ($(shell uname -s), Darwin)
 	BUILD_SHARED_LIBS := ON
+	GGML_NATIVE ?= OFF
 	ARCH := $(shell uname -m)
 	BIN_EXT :=
 	ARCHIVE_EXT := .tar.gz
@@ -69,7 +71,11 @@ ifeq ($(BUILD_SHARED_LIBS), ON)
 	cp -P $(BUILD_DIR)/ggml/src/libggml* $(RELEASE_DIR)/whisper-$(VERSION)-$(ARCH)/ 2>/dev/null || true
 	cp -P $(BUILD_DIR)/ggml/src/ggml-vulkan/libggml-vulkan.so* $(RELEASE_DIR)/whisper-$(VERSION)-$(ARCH)/ 2>/dev/null || true
 endif
-	cd $(RELEASE_DIR) && tar -czf whisper-$(VERSION)-$(ARCH)$(ARCHIVE_EXT) whisper-$(VERSION)-$(ARCH)/
+ifeq ($(ARCHIVE_EXT), .zip)
+	cd $(RELEASE_DIR) && zip -r whisper-$(VERSION)-$(ARCH).zip whisper-$(VERSION)-$(ARCH)/
+else
+	cd $(RELEASE_DIR) && tar -czf whisper-$(VERSION)-$(ARCH).tar.gz whisper-$(VERSION)-$(ARCH)/
+endif
 	rm -rf $(RELEASE_DIR)/whisper-$(VERSION)-$(ARCH)/
 
 clean:
