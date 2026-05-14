@@ -39,6 +39,10 @@ make release
 
 Produces `release/whisper-<version>-<arch>.tar.gz` containing the CLI, server, and shared libraries.
 
+## Acknowledgements
+
+The cross-platform build strategy (platform-specific CMake flags, GPU backend selection, CI build matrix) is based on [Buzz](https://github.com/chidiwilliams/buzz), an offline transcription desktop app that bundles whisper.cpp binaries across Linux, Windows, and macOS.
+
 ## License
 
 The build scripts in this repository are MIT-licensed. whisper.cpp itself is [MIT-licensed](https://github.com/ggml-org/whisper.cpp/blob/master/LICENSE).
