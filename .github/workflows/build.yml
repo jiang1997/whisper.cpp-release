@@ -20,13 +20,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact: whisper-linux-x64
+            artifact: linux-x64
           - os: windows-latest
-            artifact: whisper-windows-x64
+            artifact: windows-x64
           - os: macos-latest
-            artifact: whisper-macos-arm64
+            artifact: macos-arm64
           - os: macos-15-intel
-            artifact: whisper-macos-x64
+            artifact: macos-x64
 
     steps:
       - uses: actions/checkout@v4
@@ -116,6 +116,7 @@ jobs:
           cp build/bin/whisper-server "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
           cp -P build/src/libwhisper.* "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/" 2>/dev/null || true
           cp -P build/ggml/src/libggml* "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/" 2>/dev/null || true
+          cp -P build/ggml/src/ggml-vulkan/libggml-vulkan.so* "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/" 2>/dev/null || true
           cd release && tar -czf "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}.tar.gz" "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
 
       - name: Package (Windows)
@@ -130,7 +131,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
+          name: whisper-${{ matrix.artifact }}
           path: release/whisper-*
           if-no-files-found: error
 

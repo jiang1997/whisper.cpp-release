@@ -67,6 +67,7 @@ release: build
 ifeq ($(BUILD_SHARED_LIBS), ON)
 	cp -P $(BUILD_DIR)/src/libwhisper.* $(RELEASE_DIR)/whisper-$(VERSION)-$(ARCH)/ 2>/dev/null || true
 	cp -P $(BUILD_DIR)/ggml/src/libggml* $(RELEASE_DIR)/whisper-$(VERSION)-$(ARCH)/ 2>/dev/null || true
+	cp -P $(BUILD_DIR)/ggml/src/ggml-vulkan/libggml-vulkan.so* $(RELEASE_DIR)/whisper-$(VERSION)-$(ARCH)/ 2>/dev/null || true
 endif
 	cd $(RELEASE_DIR) && tar -czf whisper-$(VERSION)-$(ARCH)$(ARCHIVE_EXT) whisper-$(VERSION)-$(ARCH)/
 	rm -rf $(RELEASE_DIR)/whisper-$(VERSION)-$(ARCH)/
