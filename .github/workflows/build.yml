@@ -1,0 +1,170 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "*"
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: whisper-linux-x64
+          - os: windows-latest
+            artifact: whisper-windows-x64
+          - os: macos-latest
+            artifact: whisper-macos-arm64
+          - os: macos-15-intel
+            artifact: whisper-macos-x64
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Vulkan SDK (Windows & Linux)
+        if: "startsWith(matrix.os, 'ubuntu-') || matrix.os == 'windows-latest'"
+        uses: humbletim/install-vulkan-sdk@v1.2
+        with:
+          version: 1.4.309.0
+          cache: true
+
+      - name: Install Linux dependencies
+        if: "startsWith(matrix.os, 'ubuntu-')"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev
+
+      - name: Add MSBuild to PATH (Windows)
+        uses: microsoft/setup-msbuild@v2
+        if: runner.os == 'Windows'
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(grep 'project.*whisper.cpp.*VERSION' whisper.cpp/CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # ── Linux build ──────────────────────────────────────────────
+      - name: Configure (Linux)
+        if: "startsWith(matrix.os, 'ubuntu-')"
+        run: |
+          cmake -S whisper.cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_VULKAN=1 \
+            -DGGML_NATIVE=OFF \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON
+
+      # ── Windows build ────────────────────────────────────────────
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S whisper.cpp -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DBUILD_SHARED_LIBS=OFF `
+            -DGGML_VULKAN=1 `
+            -DGGML_NATIVE=OFF `
+            -DCMAKE_C_FLAGS="-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR" `
+            -DCMAKE_CXX_FLAGS="-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR" `
+            -DCMAKE_C_COMPILER_WORKS=TRUE `
+            -DCMAKE_CXX_COMPILER_WORKS=TRUE
+
+      # ── macOS ARM build ──────────────────────────────────────────
+      - name: Configure (macOS ARM)
+        if: runner.os == 'macOS' && runner.arch == 'ARM64'
+        run: |
+          cmake -S whisper.cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DWHISPER_COREML=1
+
+      # ── macOS Intel build ────────────────────────────────────────
+      - name: Configure (macOS Intel)
+        if: runner.os == 'macOS' && runner.arch == 'X64'
+        run: |
+          cmake -S whisper.cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_VULKAN=0 \
+            -DGGML_METAL=0
+
+      # ── Build ────────────────────────────────────────────────────
+      - name: Build
+        run: cmake --build build -j --config Release --verbose
+
+      # ── Package ──────────────────────────────────────────────────
+      - name: Package (Linux & macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}"
+          cp build/bin/whisper-cli "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
+          cp build/bin/whisper-server "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
+          cp -P build/src/libwhisper.* "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/" 2>/dev/null || true
+          cp -P build/ggml/src/libggml* "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/" 2>/dev/null || true
+          cd release && tar -czf "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}.tar.gz" "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}"
+          cp build/bin/Release/whisper-cli.exe "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
+          cp build/bin/Release/whisper-server.exe "release/whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
+          cd release && tar -czf "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}.tar.gz" "whisper-${{ steps.version.outputs.version }}-${{ matrix.artifact }}/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release/whisper-*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep 'project.*whisper.cpp.*VERSION' whisper.cpp/CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: whisper-*
+          path: release
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Whisper.cpp ${{ steps.version.outputs.version }}
+          body: |
+            Prebuilt binaries of [whisper.cpp](https://github.com/ggerganov/whisper.cpp) v${{ steps.version.outputs.version }}.
+
+            Each archive contains `whisper-cli` and `whisper-server`.
+
+            **GPU support:** Vulkan on Windows/Linux, CoreML on macOS Apple Silicon.
+          files: release/*
