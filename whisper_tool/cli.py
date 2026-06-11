@@ -11,7 +11,7 @@ from whisper_tool.binaries import (
     binary_status,
     download_binaries,
     ensure_binaries,
-    platform_artifact,
+    install_dir_for_config,
 )
 from whisper_tool.config import config_path, load_config, save_config
 from whisper_tool.models import (
@@ -26,10 +26,13 @@ from whisper_tool.runner import run_serve, run_transcribe
 def _cmd_setup(args: argparse.Namespace) -> int:
     cfg = load_config()
     cfg.models_dir.mkdir(parents=True, exist_ok=True)
-    cfg.effective_bin_dir().mkdir(parents=True, exist_ok=True)
+    install_dir = install_dir_for_config(cfg)
+    install_dir.mkdir(parents=True, exist_ok=True)
 
     print("==> Ensuring binaries")
-    bins = ensure_binaries(cfg.effective_bin_dir(), force=args.force)
+    if cfg.prefer_windows_binaries():
+        print("    target:   Windows (WSL GPU)")
+    bins = ensure_binaries(cfg, force=args.force)
     print(f"    cli:    {bins.cli}")
     print(f"    server: {bins.server}")
 
@@ -44,10 +47,15 @@ def _cmd_setup(args: argparse.Namespace) -> int:
 def _cmd_download(args: argparse.Namespace) -> int:
     cfg = load_config()
     cfg.models_dir.mkdir(parents=True, exist_ok=True)
-    cfg.effective_bin_dir().mkdir(parents=True, exist_ok=True)
+    install_dir = install_dir_for_config(cfg)
+    install_dir.mkdir(parents=True, exist_ok=True)
 
     if args.target == "binary":
-        download_binaries(cfg.effective_bin_dir(), force=args.force)
+        download_binaries(
+            install_dir,
+            force=args.force,
+            prefer_windows=cfg.prefer_windows_binaries(),
+        )
     elif args.target == "whisper":
         download_whisper_model(cfg, args.model, force=args.force)
     elif args.target == "vad":
@@ -106,15 +114,20 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
 def _cmd_status(_args: argparse.Namespace) -> int:
     cfg = load_config()
-    bstat = binary_status(cfg.effective_bin_dir())
+    bstat = binary_status(cfg)
     mstat = model_status(cfg)
 
     print(f"whisper-tool {__version__}")
     print(f"config:           {config_path()}")
-    print(f"platform:         {platform_artifact()}")
+    print(f"platform:         {bstat['platform_artifact']}")
+    print(f"wsl:              {bstat['wsl']}")
+    print(f"prefer_windows:   {bstat['prefer_windows']}")
     print()
     print("binaries:")
     print(f"  found:          {bstat['found']}")
+    print(f"  windows_binary: {bstat['windows_binary']}")
+    if bstat["linux_fallback"]:
+        print("  note:           using Linux binary (Windows binary not installed)")
     print(f"  source:         {bstat['source'] or '(not found)'}")
     print(f"  cli:            {bstat['cli'] or '(not found)'}")
     print(f"  server:         {bstat['server'] or '(not found)'}")

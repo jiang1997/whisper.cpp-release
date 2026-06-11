@@ -7,25 +7,31 @@ import subprocess
 import sys
 from pathlib import Path
 
-from whisper_tool.binaries import BinaryPaths, ensure_binaries, resolve_binaries
+from whisper_tool.binaries import (
+    BinaryPaths,
+    ensure_binaries,
+    resolve_binaries_for_run,
+)
 from whisper_tool.config import Config
+from whisper_tool.wsl import arg_for_binary
 
 
-def _lib_env(bin_dir: Path) -> dict[str, str] | None:
-    if sys.platform == "win32":
+def _lib_env(bins: BinaryPaths) -> dict[str, str] | None:
+    if sys.platform == "win32" or bins.windows:
         return None
     env = os.environ.copy()
     existing = env.get("LD_LIBRARY_PATH", "")
-    env["LD_LIBRARY_PATH"] = f"{bin_dir}:{existing}" if existing else str(bin_dir)
+    env["LD_LIBRARY_PATH"] = (
+        f"{bins.bin_dir}:{existing}" if existing else str(bins.bin_dir)
+    )
     return env
 
 
 def _require_binaries(cfg: Config) -> BinaryPaths:
-    install_dir = cfg.effective_bin_dir()
-    found = resolve_binaries(install_dir)
+    found = resolve_binaries_for_run(cfg)
     if found:
         return found
-    return ensure_binaries(install_dir)
+    return ensure_binaries(cfg)
 
 
 def _require_whisper_model(cfg: Config) -> Path:
@@ -48,6 +54,10 @@ def _require_vad_model(cfg: Config) -> Path:
     return path
 
 
+def _path_arg(path: Path, bins: BinaryPaths) -> str:
+    return arg_for_binary(path, bins.cli)
+
+
 def run_transcribe(
     cfg: Config,
     audio_files: list[Path],
@@ -66,11 +76,11 @@ def run_transcribe(
     bins = _require_binaries(cfg)
     model = _require_whisper_model(cfg)
 
-    cmd: list[str] = [str(bins.cli), "-m", str(model)]
+    cmd: list[str] = [str(bins.cli), "-m", _path_arg(model, bins)]
 
     if use_vad:
         vad = _require_vad_model(cfg)
-        cmd.extend(["--vad", "-vm", str(vad)])
+        cmd.extend(["--vad", "-vm", _path_arg(vad, bins)])
 
     if language:
         cmd.extend(["-l", language])
@@ -92,9 +102,12 @@ def run_transcribe(
         cmd.extend(extra_args)
 
     for f in audio_files:
-        cmd.append(str(f))
+        cmd.append(_path_arg(f, bins))
 
-    result = subprocess.run(cmd, env=_lib_env(bins.bin_dir))
+    if bins.windows:
+        print(f"Using Windows binary (WSL GPU): {bins.cli}")
+
+    result = subprocess.run(cmd, env=_lib_env(bins))
     return result.returncode
 
 
@@ -113,7 +126,7 @@ def run_serve(
     cmd: list[str] = [
         str(bins.server),
         "-m",
-        str(model),
+        _path_arg(model, bins),
         "--host",
         host,
         "--port",
@@ -122,7 +135,7 @@ def run_serve(
 
     if use_vad:
         vad = _require_vad_model(cfg)
-        cmd.extend(["--vad", "-vm", str(vad)])
+        cmd.extend(["--vad", "-vm", _path_arg(vad, bins)])
 
     if threads is not None:
         cmd.extend(["-t", str(threads)])
@@ -133,6 +146,8 @@ def run_serve(
     print(f"  model: {model}")
     if use_vad:
         print(f"  vad:   {cfg.vad_model_path()}")
+    if bins.windows:
+        print(f"  binary: {bins.server} (Windows/WSL GPU)")
 
-    result = subprocess.run(cmd, env=_lib_env(bins.bin_dir))
+    result = subprocess.run(cmd, env=_lib_env(bins))
     return result.returncode

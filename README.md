@@ -59,7 +59,19 @@ Another optional install via pip: `pip install -e .` / `pipx install -e .` also 
 | Whisper | `small.en` | `ggml-small.en.bin` |
 | VAD | `silero-v6.2.0` | `ggml-silero-v6.2.0.bin` |
 
-Models are stored in `~/.local/share/whisper-cpp-release/models/`. Binaries downloaded from Releases go to `~/.local/share/whisper-cpp-release/bin/`.
+Models are stored in `~/.local/share/whisper-cpp-release/models/`. Binaries downloaded from Releases go to `~/.local/share/whisper-cpp-release/bin/` (Linux) or `bin-win/` (WSL Windows).
+
+### WSL: use Windows binaries for Vulkan GPU
+
+On WSL, the tool automatically prefers Windows `whisper-cli.exe` / `whisper-server.exe` so inference can use Windows Vulkan drivers. `setup` downloads the `windows-x64` release into `bin-win/`. Model and audio paths are converted via `wslpath` when calling `.exe`.
+
+```bash
+./bin/whisper-tool setup      # downloads windows-x64 binaries on WSL
+./bin/whisper-tool status     # shows wsl: true, windows_binary: true
+./bin/whisper-tool transcribe audio.wav
+```
+
+Force Linux binaries (CPU only): `WHISPER_TOOL_LINUX_BINARIES=1 ./bin/whisper-tool setup`
 
 ### Commands
 
@@ -74,7 +86,10 @@ Models are stored in `~/.local/share/whisper-cpp-release/models/`. Binaries down
 ./bin/whisper-tool status
 ```
 
-Binary discovery order: config `bin_dir` → `PATH` → `whisper.cpp/build/bin/` → `release/whisper-*/` → downloaded bin dir.
+Binary discovery order:
+
+- **WSL (default):** `bin-win/` → `whisper-cli.exe` on `PATH` → `release/whisper-*-windows-x64/` → fallback to Linux `bin/`
+- **Linux/macOS:** config `bin_dir` → `PATH` → `whisper.cpp/build/bin/` → `release/whisper-*/` → downloaded bin dir
 
 ## Build locally
 
