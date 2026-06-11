@@ -6,3 +6,11 @@
 *.dylib
 *.exe
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+/dist/
+*.egg

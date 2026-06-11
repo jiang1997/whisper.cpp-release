@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whisper-tool"
+version = "0.1.0"
+description = "CLI tool for whisper.cpp: download models/binaries and run transcription"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[project.scripts]
+whisper-tool = "whisper_tool.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["whisper_tool*"]
