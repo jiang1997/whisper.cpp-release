@@ -23,32 +23,34 @@ A Python helper that downloads default models, locates or fetches prebuilt binar
 
 **Requirements:** Python 3.10+, stdlib only (no `pip install` needed).
 
-Run from the repo root — no installation required:
+Run the launcher script from the repo — works from any working directory:
 
 ```bash
 cd whisper.cpp-release
 
 # One-shot setup: binaries (from local build/release or GitHub Releases) + default models
-python3 -m whisper_tool setup
+./bin/whisper-tool setup
 
 # Check resolved paths
-python3 -m whisper_tool status
+./bin/whisper-tool status
 
 # Transcribe (VAD enabled by default)
-python3 -m whisper_tool transcribe audio.wav
+./bin/whisper-tool transcribe audio.wav
 
 # Start HTTP server
-python3 -m whisper_tool serve --host 0.0.0.0 --port 8080
+./bin/whisper-tool serve --host 0.0.0.0 --port 8080
 ```
 
-### Optional: install as `whisper-tool` command
-
-If you want a global `whisper-tool` shortcut (instead of `python3 -m whisper_tool`):
+Install to PATH (optional):
 
 ```bash
-pip install -e .        # or: pipx install -e .
+ln -s "$(pwd)/bin/whisper-tool" ~/.local/bin/whisper-tool
 whisper-tool status
 ```
+
+Equivalent without the launcher: `python3 -m whisper_tool ...` (must run from repo root, or set `PYTHONPATH`).
+
+Another optional install via pip: `pip install -e .` / `pipx install -e .` also provides a `whisper-tool` command.
 
 ### Default models
 
@@ -62,14 +64,14 @@ Models are stored in `~/.local/share/whisper-cpp-release/models/`. Binaries down
 ### Commands
 
 ```bash
-python3 -m whisper_tool setup                              # binaries + default models
-python3 -m whisper_tool download binary                    # fetch release binaries only
-python3 -m whisper_tool download whisper [MODEL]           # e.g. base.en, small.en
-python3 -m whisper_tool download vad [MODEL]               # e.g. silero-v6.2.0
-python3 -m whisper_tool transcribe FILE [FILE...] [--no-vad] [-l LANG] [--output-json]
-python3 -m whisper_tool transcribe audio.wav -- -pp          # pass extra args to whisper-cli after --
-python3 -m whisper_tool serve [--host HOST] [--port PORT] [--no-vad]
-python3 -m whisper_tool status
+./bin/whisper-tool setup                              # binaries + default models
+./bin/whisper-tool download binary                    # fetch release binaries only
+./bin/whisper-tool download whisper [MODEL]           # e.g. base.en, small.en
+./bin/whisper-tool download vad [MODEL]               # e.g. silero-v6.2.0
+./bin/whisper-tool transcribe FILE [FILE...] [--no-vad] [-l LANG] [--output-json]
+./bin/whisper-tool transcribe audio.wav -- -pp          # pass extra args to whisper-cli after --
+./bin/whisper-tool serve [--host HOST] [--port PORT] [--no-vad]
+./bin/whisper-tool status
 ```
 
 Binary discovery order: config `bin_dir` → `PATH` → `whisper.cpp/build/bin/` → `release/whisper-*/` → downloaded bin dir.
