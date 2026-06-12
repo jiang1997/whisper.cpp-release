@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -26,20 +27,32 @@ def _xdg_data_home() -> Path:
     return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
 
 
+def app_data_root() -> Path:
+    """Root directory for models, binaries, and caches."""
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            return Path(local) / APP_NAME
+        return Path.home() / "AppData" / "Local" / APP_NAME
+    return _xdg_data_home() / APP_NAME
+
+
 def config_path() -> Path:
+    if sys.platform == "win32":
+        return app_data_root() / "config.json"
     return _xdg_config_home() / APP_NAME / "config.json"
 
 
 def default_models_dir() -> Path:
-    return _xdg_data_home() / APP_NAME / "models"
+    return app_data_root() / "models"
 
 
 def default_bin_dir() -> Path:
-    return _xdg_data_home() / APP_NAME / "bin"
+    return app_data_root() / "bin"
 
 
 def default_windows_bin_dir() -> Path:
-    return _xdg_data_home() / APP_NAME / "bin-win"
+    return app_data_root() / "bin-win"
 
 
 def repo_root() -> Path:

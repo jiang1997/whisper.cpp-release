@@ -59,7 +59,14 @@ Another optional install via pip: `pip install -e .` / `pipx install -e .` also 
 | Whisper | `small.en` | `ggml-small.en.bin` |
 | VAD | `silero-v6.2.0` | `ggml-silero-v6.2.0.bin` |
 
-Models are stored in `~/.local/share/whisper-cpp-release/models/`. Binaries downloaded from Releases go to `~/.local/share/whisper-cpp-release/bin/` (Linux) or `bin-win/` (WSL Windows).
+Default data locations:
+
+| Platform | Root directory |
+|----------|----------------|
+| Linux / macOS / WSL | `~/.local/share/whisper-cpp-release/` |
+| Windows | `%LOCALAPPDATA%\whisper-cpp-release\` |
+
+Under the root: `models/`, `bin/` (Linux/macOS/Windows), `bin-win/` (WSL Windows `.exe`), `downloads/`. Config is `config.json` in the root on Windows, or `~/.config/whisper-cpp-release/config.json` on Linux/macOS/WSL.
 
 ### WSL: use Windows binaries for Vulkan GPU
 
@@ -87,7 +94,7 @@ Force Linux binaries (CPU only): `WHISPER_TOOL_LINUX_BINARIES=1 ./bin/whisper-to
 ./bin/whisper-tool clean [--dry-run] [--models] [--binaries] [--config]
 ```
 
-`clean` removes user data under `~/.local/share/whisper-cpp-release/` and `~/.config/whisper-cpp-release/`. Without flags it removes everything; use `--dry-run` to preview.
+`clean` removes downloaded user data from the platform-specific directories above. Without flags it removes everything; use `--dry-run` to preview.
 
 Binary discovery order:
 
