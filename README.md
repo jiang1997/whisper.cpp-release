@@ -84,7 +84,10 @@ Force Linux binaries (CPU only): `WHISPER_TOOL_LINUX_BINARIES=1 ./bin/whisper-to
 ./bin/whisper-tool transcribe audio.wav -- -pp          # pass extra args to whisper-cli after --
 ./bin/whisper-tool serve [--host HOST] [--port PORT] [--no-vad]
 ./bin/whisper-tool status
+./bin/whisper-tool clean [--dry-run] [--models] [--binaries] [--config]
 ```
+
+`clean` removes user data under `~/.local/share/whisper-cpp-release/` and `~/.config/whisper-cpp-release/`. Without flags it removes everything; use `--dry-run` to preview.
 
 Binary discovery order:
 

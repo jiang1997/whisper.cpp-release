@@ -20,6 +20,7 @@ from whisper_tool.models import (
     download_whisper_model,
     model_status,
 )
+from whisper_tool.clean import cmd_clean
 from whisper_tool.runner import run_serve, run_transcribe
 
 
@@ -191,6 +192,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_st = sub.add_parser("status", help="Show binary and model status")
     p_st.set_defaults(func=_cmd_status)
+
+    p_clean = sub.add_parser(
+        "clean",
+        help="Remove downloaded models, binaries, config, and caches",
+    )
+    p_clean.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be removed without deleting",
+    )
+    p_clean.add_argument(
+        "--models",
+        action="store_true",
+        help="Remove only model files",
+    )
+    p_clean.add_argument(
+        "--binaries",
+        action="store_true",
+        help="Remove only binaries and download archives",
+    )
+    p_clean.add_argument(
+        "--config",
+        action="store_true",
+        help="Remove only config file",
+    )
+    p_clean.set_defaults(func=cmd_clean)
 
     return parser
 
