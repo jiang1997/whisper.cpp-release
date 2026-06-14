@@ -206,14 +206,30 @@ def _fetch_latest_release_asset(artifact: str) -> tuple[str, str]:
     )
 
 
+def _safe_member_path(dest_dir: Path, member_name: str) -> Path:
+    dest_root = dest_dir.resolve()
+    target = (dest_root / member_name).resolve()
+    try:
+        target.relative_to(dest_root)
+    except ValueError as e:
+        raise RuntimeError(
+            f"Archive entry escapes destination: {member_name}"
+        ) from e
+    return target
+
+
 def _extract_archive(archive: Path, dest_dir: Path) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     if archive.suffix == ".gz" and archive.name.endswith(".tar.gz"):
         with tarfile.open(archive, "r:gz") as tar:
+            for member in tar.getmembers():
+                _safe_member_path(dest_dir, member.name)
             tar.extractall(dest_dir)
     elif archive.suffix == ".zip":
         with zipfile.ZipFile(archive, "r") as zf:
+            for member in zf.infolist():
+                _safe_member_path(dest_dir, member.filename)
             zf.extractall(dest_dir)
     else:
         raise RuntimeError(f"Unsupported archive format: {archive}")

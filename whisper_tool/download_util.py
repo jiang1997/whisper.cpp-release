@@ -140,6 +140,6 @@ def download_file(
         tmp.unlink(missing_ok=True)
         raise RuntimeError(f"Failed to download {url}: {e}") from e
 
-    tmp.rename(dest)
+    tmp.replace(dest)
     verify_artifact(dest, exp)
     print(f"Done: {dest}")
