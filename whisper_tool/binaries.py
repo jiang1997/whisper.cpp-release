@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from whisper_tool.config import GITHUB_API_LATEST, repo_root
 from whisper_tool.download_util import DownloadExpectation, download_file
@@ -208,7 +208,16 @@ def _fetch_latest_release_asset(artifact: str) -> tuple[str, str]:
 
 def _safe_member_path(dest_dir: Path, member_name: str) -> Path:
     dest_root = dest_dir.resolve()
-    target = (dest_root / member_name).resolve()
+    rel = PurePosixPath(member_name.replace("\\", "/"))
+    if rel.is_absolute():
+        raise RuntimeError(
+            f"Archive entry escapes destination: {member_name}"
+        )
+    if ".." in rel.parts:
+        raise RuntimeError(
+            f"Archive entry escapes destination: {member_name}"
+        )
+    target = dest_root.joinpath(*rel.parts)
     try:
         target.relative_to(dest_root)
     except ValueError as e:
@@ -218,19 +227,60 @@ def _safe_member_path(dest_dir: Path, member_name: str) -> Path:
     return target
 
 
+def _validate_tar_member(dest_dir: Path, member: tarfile.TarInfo) -> None:
+    _safe_member_path(dest_dir, member.name)
+    if member.issym() or member.islnk():
+        raise RuntimeError(
+            f"Archive contains unsupported link entry: {member.name}"
+        )
+    if member.isdev() or member.isfifo() or member.ischr() or member.isblk():
+        raise RuntimeError(
+            f"Archive contains unsupported special entry: {member.name}"
+        )
+
+
+def _extract_tar_archive(tar: tarfile.TarFile, dest_dir: Path) -> None:
+    for member in tar.getmembers():
+        _validate_tar_member(dest_dir, member)
+
+    for member in tar.getmembers():
+        if member.isdir():
+            _safe_member_path(dest_dir, member.name).mkdir(parents=True, exist_ok=True)
+            continue
+        if not member.isreg():
+            continue
+        target = _safe_member_path(dest_dir, member.name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        extracted = tar.extractfile(member)
+        if extracted is None:
+            raise RuntimeError(f"Failed to extract archive member: {member.name}")
+        with extracted, open(target, "wb") as out:
+            shutil.copyfileobj(extracted, out)
+
+
+def _extract_zip_archive(zf: zipfile.ZipFile, dest_dir: Path) -> None:
+    for member in zf.infolist():
+        _safe_member_path(dest_dir, member.filename)
+
+    for member in zf.infolist():
+        target = _safe_member_path(dest_dir, member.filename)
+        if member.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(member) as src, open(target, "wb") as out:
+            shutil.copyfileobj(src, out)
+
+
 def _extract_archive(archive: Path, dest_dir: Path) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     if archive.suffix == ".gz" and archive.name.endswith(".tar.gz"):
         with tarfile.open(archive, "r:gz") as tar:
-            for member in tar.getmembers():
-                _safe_member_path(dest_dir, member.name)
-            tar.extractall(dest_dir)
+            _extract_tar_archive(tar, dest_dir)
     elif archive.suffix == ".zip":
         with zipfile.ZipFile(archive, "r") as zf:
-            for member in zf.infolist():
-                _safe_member_path(dest_dir, member.filename)
-            zf.extractall(dest_dir)
+            _extract_zip_archive(zf, dest_dir)
     else:
         raise RuntimeError(f"Unsupported archive format: {archive}")
 
