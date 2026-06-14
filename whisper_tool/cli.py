@@ -14,6 +14,7 @@ from whisper_tool.binaries import (
     install_dir_for_config,
 )
 from whisper_tool.config import config_path, load_config, save_config
+from whisper_tool.gpu_backend import resolve_gpu_backend
 from whisper_tool.models import (
     download_default_models,
     download_vad_model,
@@ -24,15 +25,25 @@ from whisper_tool.clean import cmd_clean
 from whisper_tool.runner import run_serve, run_transcribe
 
 
+def _apply_backend(cfg, backend: str | None) -> None:
+    if backend is not None:
+        cfg.gpu_backend = backend
+
+
 def _cmd_setup(args: argparse.Namespace) -> int:
     cfg = load_config()
+    _apply_backend(cfg, getattr(args, "backend", None))
     cfg.models_dir.mkdir(parents=True, exist_ok=True)
     install_dir = install_dir_for_config(cfg)
     install_dir.mkdir(parents=True, exist_ok=True)
 
+    gpu_backend = resolve_gpu_backend(cfg)
     print("==> Ensuring binaries")
+    print(f"    backend:  {gpu_backend}")
     if cfg.prefer_windows_binaries():
         print("    target:   Windows (WSL GPU)")
+    if gpu_backend == "sycl":
+        print("    note:     SYCL builds require Intel oneAPI + Level Zero runtime")
     bins = ensure_binaries(cfg, force=args.force)
     print(f"    cli:    {bins.cli}")
     print(f"    server: {bins.server}")
@@ -47,6 +58,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
 
 def _cmd_download(args: argparse.Namespace) -> int:
     cfg = load_config()
+    _apply_backend(cfg, getattr(args, "backend", None))
     cfg.models_dir.mkdir(parents=True, exist_ok=True)
     install_dir = install_dir_for_config(cfg)
     install_dir.mkdir(parents=True, exist_ok=True)
@@ -56,6 +68,7 @@ def _cmd_download(args: argparse.Namespace) -> int:
             install_dir,
             force=args.force,
             prefer_windows=cfg.prefer_windows_binaries(),
+            gpu_backend=resolve_gpu_backend(cfg),
         )
     elif args.target == "whisper":
         download_whisper_model(cfg, args.model, force=args.force)
@@ -120,6 +133,7 @@ def _cmd_status(_args: argparse.Namespace) -> int:
 
     print(f"whisper-tool {__version__}")
     print(f"config:           {config_path()}")
+    print(f"gpu_backend:      {bstat['gpu_backend']}")
     print(f"platform:         {bstat['platform_artifact']}")
     print(f"wsl:              {bstat['wsl']}")
     print(f"prefer_windows:   {bstat['prefer_windows']}")
@@ -153,6 +167,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_setup = sub.add_parser("setup", help="Download binaries (if needed) and default models")
     p_setup.add_argument("--force", action="store_true", help="Re-download even if files exist")
+    p_setup.add_argument(
+        "--backend",
+        choices=["vulkan", "sycl"],
+        help="GPU backend for downloaded binaries (default: vulkan, or config/env)",
+    )
     p_setup.set_defaults(func=_cmd_setup)
 
     p_dl = sub.add_parser("download", help="Download binaries or models")
@@ -168,6 +187,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Model name (for whisper/vad targets; uses defaults if omitted)",
     )
     p_dl.add_argument("--force", action="store_true", help="Re-download even if files exist")
+    p_dl.add_argument(
+        "--backend",
+        choices=["vulkan", "sycl"],
+        help="GPU backend when downloading binaries (default: vulkan, or config/env)",
+    )
     p_dl.set_defaults(func=_cmd_download)
 
     p_tr = sub.add_parser("transcribe", help="Transcribe audio file(s)")

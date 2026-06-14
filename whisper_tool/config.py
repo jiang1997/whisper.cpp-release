@@ -11,6 +11,7 @@ from pathlib import Path
 APP_NAME = "whisper-cpp-release"
 DEFAULT_WHISPER_MODEL = "small.en"
 DEFAULT_VAD_MODEL = "silero-v6.2.0"
+DEFAULT_GPU_BACKEND = "auto"
 
 WHISPER_HF_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
 VAD_HF_BASE = "https://huggingface.co/ggml-org/whisper-vad/resolve/main"
@@ -68,6 +69,7 @@ class Config:
     bin_dir_win: Path = field(default_factory=default_windows_bin_dir)
     bin_dir_override: Path | None = None
     use_windows_binaries: bool | None = None
+    gpu_backend: str = DEFAULT_GPU_BACKEND
 
     def whisper_model_path(self) -> Path:
         return self.models_dir / f"ggml-{self.whisper_model}.bin"
@@ -112,6 +114,8 @@ def load_config() -> Config:
         cfg.bin_dir_override = Path(data["bin_dir_override"])
     if "use_windows_binaries" in data:
         cfg.use_windows_binaries = data["use_windows_binaries"]
+    if "gpu_backend" in data:
+        cfg.gpu_backend = data["gpu_backend"]
     return cfg
 
 
@@ -126,5 +130,6 @@ def save_config(cfg: Config) -> None:
         "bin_dir_win": str(cfg.bin_dir_win),
         "bin_dir_override": str(cfg.bin_dir_override) if cfg.bin_dir_override else None,
         "use_windows_binaries": cfg.use_windows_binaries,
+        "gpu_backend": cfg.gpu_backend,
     }
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

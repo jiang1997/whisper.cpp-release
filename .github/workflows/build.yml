@@ -142,6 +142,81 @@ jobs:
           path: release/whisper-*
           if-no-files-found: error
 
+  build-sycl-linux:
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+
+    env:
+      LEVEL_ZERO_VERSION: "1.28.2"
+      LEVEL_ZERO_UBUNTU_VERSION: "u24.04"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Intel oneAPI
+        run: |
+          cd /tmp
+          wget -q https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+          rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
+          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            intel-oneapi-compiler-dpcpp-cpp \
+            intel-oneapi-mkl-devel
+
+      - name: Install Level Zero SDK
+        run: |
+          cd /tmp
+          wget -q "https://github.com/oneapi-src/level-zero/releases/download/v${LEVEL_ZERO_VERSION}/level-zero_${LEVEL_ZERO_VERSION}%2B${LEVEL_ZERO_UBUNTU_VERSION}_amd64.deb" -O level-zero.deb
+          wget -q "https://github.com/oneapi-src/level-zero/releases/download/v${LEVEL_ZERO_VERSION}/level-zero-devel_${LEVEL_ZERO_VERSION}%2B${LEVEL_ZERO_UBUNTU_VERSION}_amd64.deb" -O level-zero-devel.deb
+          sudo apt-get install -y ./level-zero.deb ./level-zero-devel.deb
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION=$(grep 'project.*whisper.cpp.*VERSION' whisper.cpp/CMakeLists.txt | sed -n 's/.*VERSION \([0-9.]*\).*/\1/p')
+          if [ -z "$VERSION" ]; then echo "Could not extract version from whisper.cpp/CMakeLists.txt" >&2; exit 1; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Configure (Linux SYCL)
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake -S whisper.cpp -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_SYCL=ON \
+            -DGGML_VULKAN=OFF \
+            -DGGML_NATIVE=OFF \
+            -DCMAKE_C_COMPILER=icx \
+            -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON
+
+      - name: Build
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --build build -j --config Release --verbose
+
+      - name: Package (Linux SYCL)
+        run: |
+          mkdir -p "release/whisper-${{ steps.version.outputs.version }}-linux-x64-sycl"
+          cp build/bin/whisper-cli "release/whisper-${{ steps.version.outputs.version }}-linux-x64-sycl/"
+          cp build/bin/whisper-server "release/whisper-${{ steps.version.outputs.version }}-linux-x64-sycl/"
+          cp -P build/src/libwhisper.* "release/whisper-${{ steps.version.outputs.version }}-linux-x64-sycl/" 2>/dev/null || true
+          cp -P build/ggml/src/libggml* "release/whisper-${{ steps.version.outputs.version }}-linux-x64-sycl/" 2>/dev/null || true
+          cp -P build/ggml/src/ggml-sycl/libggml-sycl.so* "release/whisper-${{ steps.version.outputs.version }}-linux-x64-sycl/" 2>/dev/null || true
+          cd release && tar -czf "whisper-${{ steps.version.outputs.version }}-linux-x64-sycl.tar.gz" "whisper-${{ steps.version.outputs.version }}-linux-x64-sycl/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-linux-x64-sycl
+          path: release/whisper-*
+          if-no-files-found: error
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -177,5 +252,5 @@ jobs:
 
             Each archive contains `whisper-cli` and `whisper-server`.
 
-            **GPU support:** Vulkan on Windows/Linux, CoreML on macOS Apple Silicon.
+            **GPU support:** Vulkan on Windows/Linux, CoreML on macOS Apple Silicon, SYCL (Intel GPU/CPU) on Linux x86_64.
           files: release/*

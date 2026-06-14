@@ -16,6 +16,7 @@ from pathlib import Path, PurePosixPath
 
 from whisper_tool.config import GITHUB_API_LATEST, repo_root
 from whisper_tool.download_util import DownloadExpectation, download_file
+from whisper_tool.gpu_backend import artifact_for_backend, resolve_gpu_backend
 from whisper_tool.wsl import is_wsl, prefer_windows_binaries
 
 EXE_EXT = ".exe" if sys.platform == "win32" else ""
@@ -42,7 +43,11 @@ def _server_name(*, windows: bool = False) -> str:
     return "whisper-server"
 
 
-def platform_artifact(*, prefer_windows: bool | None = None) -> str:
+def platform_artifact(
+    *,
+    prefer_windows: bool | None = None,
+    gpu_backend: str = "vulkan",
+) -> str:
     if prefer_windows is None:
         prefer_windows = prefer_windows_binaries()
 
@@ -52,15 +57,15 @@ def platform_artifact(*, prefer_windows: bool | None = None) -> str:
     if system == "linux":
         if prefer_windows and is_wsl():
             if machine in ("x86_64", "amd64"):
-                return "windows-x64"
+                return artifact_for_backend("windows-x64", gpu_backend)
             raise RuntimeError(f"WSL Windows binaries require x86_64, got: {machine}")
         if machine in ("x86_64", "amd64"):
-            return "linux-x64"
+            return artifact_for_backend("linux-x64", gpu_backend)
         raise RuntimeError(f"Unsupported Linux architecture: {machine}")
 
     if system == "win32":
         if machine in ("x86_64", "amd64"):
-            return "windows-x64"
+            return artifact_for_backend("windows-x64", gpu_backend)
         raise RuntimeError(f"Unsupported Windows architecture: {machine}")
 
     if system == "darwin":
@@ -99,7 +104,12 @@ def _check_pair(bin_dir: Path, *, windows: bool) -> BinaryPaths | None:
     return None
 
 
-def _release_dirs(root: Path, *, windows: bool | None = None) -> list[Path]:
+def _release_dirs(
+    root: Path,
+    *,
+    windows: bool | None = None,
+    gpu_backend: str = "vulkan",
+) -> list[Path]:
     release_dir = root / "release"
     if not release_dir.is_dir():
         return []
@@ -113,11 +123,20 @@ def _release_dirs(root: Path, *, windows: bool | None = None) -> list[Path]:
             continue
         if windows is False and "windows" in name:
             continue
+        if gpu_backend == "sycl" and "-sycl" not in name:
+            continue
+        if gpu_backend == "vulkan" and "-sycl" in name:
+            continue
         dirs.append(child)
     return dirs
 
 
-def _search_dirs(cfg_bin_dir: Path | None, *, windows: bool) -> list[Path]:
+def _search_dirs(
+    cfg_bin_dir: Path | None,
+    *,
+    windows: bool,
+    gpu_backend: str = "vulkan",
+) -> list[Path]:
     dirs: list[Path] = []
     root = repo_root()
 
@@ -139,7 +158,7 @@ def _search_dirs(cfg_bin_dir: Path | None, *, windows: bool) -> list[Path]:
     if sys.platform == "win32":
         dirs.append(root / "whisper.cpp" / "build" / "bin" / "Release")
 
-    dirs.extend(_release_dirs(root, windows=windows if is_wsl() else None))
+    dirs.extend(_release_dirs(root, windows=windows if is_wsl() else None, gpu_backend=gpu_backend))
 
     if cfg_bin_dir is None:
         from whisper_tool.config import default_bin_dir, default_windows_bin_dir
@@ -163,18 +182,19 @@ def resolve_binaries(
     *,
     prefer_windows: bool | None = None,
     allow_linux_fallback: bool = False,
+    gpu_backend: str = "vulkan",
 ) -> BinaryPaths | None:
     if prefer_windows is None:
         prefer_windows = prefer_windows_binaries()
 
     if prefer_windows:
-        for d in _search_dirs(cfg_bin_dir, windows=True):
+        for d in _search_dirs(cfg_bin_dir, windows=True, gpu_backend=gpu_backend):
             if result := _check_pair(d, windows=True):
                 return result
         if not allow_linux_fallback:
             return None
 
-    for d in _search_dirs(cfg_bin_dir, windows=False):
+    for d in _search_dirs(cfg_bin_dir, windows=False, gpu_backend=gpu_backend):
         if result := _check_pair(d, windows=False):
             return result
 
@@ -303,6 +323,7 @@ def download_binaries(
     *,
     force: bool = False,
     prefer_windows: bool | None = None,
+    gpu_backend: str = "vulkan",
 ) -> BinaryPaths:
     windows = prefer_windows if prefer_windows is not None else prefer_windows_binaries()
     existing = _check_pair(dest_dir, windows=windows)
@@ -310,7 +331,7 @@ def download_binaries(
         print(f"Binaries already present in {dest_dir}")
         return existing
 
-    artifact = platform_artifact(prefer_windows=windows)
+    artifact = platform_artifact(prefer_windows=windows, gpu_backend=gpu_backend)
     url, tag = _fetch_latest_release_asset(artifact)
     print(f"Latest release: {tag} ({artifact})")
 
@@ -354,19 +375,34 @@ def install_dir_for_config(cfg) -> Path:
 
 def ensure_binaries(cfg, *, force: bool = False) -> BinaryPaths:
     prefer_win = cfg.prefer_windows_binaries()
+    gpu_backend = resolve_gpu_backend(cfg)
     install_dir = install_dir_for_config(cfg)
-    found = resolve_binaries(install_dir, prefer_windows=prefer_win)
+    found = resolve_binaries(
+        install_dir,
+        prefer_windows=prefer_win,
+        gpu_backend=gpu_backend,
+    )
     if found and not force:
         return found
 
     install_dir.mkdir(parents=True, exist_ok=True)
-    return download_binaries(install_dir, force=force, prefer_windows=prefer_win)
+    return download_binaries(
+        install_dir,
+        force=force,
+        prefer_windows=prefer_win,
+        gpu_backend=gpu_backend,
+    )
 
 
 def resolve_binaries_for_run(cfg) -> BinaryPaths | None:
     prefer_win = cfg.prefer_windows_binaries()
+    gpu_backend = resolve_gpu_backend(cfg)
     install_dir = install_dir_for_config(cfg)
-    found = resolve_binaries(install_dir, prefer_windows=prefer_win)
+    found = resolve_binaries(
+        install_dir,
+        prefer_windows=prefer_win,
+        gpu_backend=gpu_backend,
+    )
     if found:
         return found
     if prefer_win:
@@ -374,15 +410,17 @@ def resolve_binaries_for_run(cfg) -> BinaryPaths | None:
             cfg.effective_bin_dir(),
             prefer_windows=False,
             allow_linux_fallback=True,
+            gpu_backend=gpu_backend,
         )
     return None
 
 
 def binary_status(cfg) -> dict[str, object]:
     prefer_win = cfg.prefer_windows_binaries()
+    gpu_backend = resolve_gpu_backend(cfg)
     install_dir = install_dir_for_config(cfg)
     found = resolve_binaries_for_run(cfg)
-    artifact = platform_artifact(prefer_windows=prefer_win)
+    artifact = platform_artifact(prefer_windows=prefer_win, gpu_backend=gpu_backend)
     if prefer_win and is_wsl():
         artifact = f"{artifact} (WSL)"
 
@@ -393,6 +431,7 @@ def binary_status(cfg) -> dict[str, object]:
     return {
         "wsl": is_wsl(),
         "prefer_windows": prefer_win,
+        "gpu_backend": gpu_backend,
         "platform_artifact": artifact,
         "cli": found.cli if found else None,
         "server": found.server if found else None,

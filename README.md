@@ -8,7 +8,7 @@ Each release includes `whisper-cli` and `whisper-server`.
 
 | Platform | Arch | GPU backend |
 |----------|------|-------------|
-| Linux | x86_64 | Vulkan |
+| Linux | x86_64 | Vulkan (default), SYCL (Intel) |
 | Windows | x86_64 | Vulkan |
 | macOS (Apple Silicon) | arm64 | CoreML |
 | macOS (Intel) | x86_64 | CPU only |
@@ -80,6 +80,27 @@ On WSL, the tool automatically prefers Windows `whisper-cli.exe` / `whisper-serv
 
 Force Linux binaries (CPU only): `WHISPER_TOOL_LINUX_BINARIES=1 ./bin/whisper-tool setup`
 
+### Intel GPU: SYCL backend (Linux x86_64)
+
+For Intel integrated/discrete GPUs, prebuilt **SYCL** binaries are also published as `linux-x64-sycl` releases. They use Intel oneAPI at runtime (Level Zero + MKL), so install the [Intel oneAPI DPC++/MKL components](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html) and Level Zero driver on the target machine before use.
+
+```bash
+# Download SYCL binaries instead of Vulkan
+./bin/whisper-tool setup --backend sycl
+
+# Or persist in config / environment
+export WHISPER_TOOL_GPU_BACKEND=sycl
+./bin/whisper-tool setup
+./bin/whisper-tool status   # gpu_backend: sycl, platform: linux-x64-sycl
+```
+
+Build SYCL locally (requires `source /opt/intel/oneapi/setvars.sh` first):
+
+```bash
+GGML_SYCL=1 make build
+GGML_SYCL=1 make release    # release/whisper-<version>-<arch>-sycl.tar.gz
+```
+
 ### Commands
 
 ```bash
@@ -112,6 +133,7 @@ make build
 Override GPU support:
 ```bash
 GGML_VULKAN=0 make build      # CPU-only on Linux/Windows
+GGML_SYCL=1 make build        # Intel SYCL on Linux/Windows (oneAPI required)
 WHISPER_COREML=0 make build   # CPU-only on macOS ARM
 ```
 
