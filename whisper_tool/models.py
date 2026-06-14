@@ -30,6 +30,7 @@ def download_whisper_model(
         force=force,
         expectation=expectation_for_filename(dest.name),
     )
+    cfg.whisper_model = model
     return dest
 
 
@@ -47,6 +48,7 @@ def download_vad_model(
         force=force,
         expectation=expectation_for_filename(dest.name),
     )
+    cfg.vad_model = model
     return dest
 
 
