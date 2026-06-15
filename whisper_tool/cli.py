@@ -43,7 +43,7 @@ def _cmd_setup(args: argparse.Namespace) -> int:
     if cfg.prefer_windows_binaries():
         print("    target:   Windows (WSL GPU)")
     if gpu_backend == "sycl":
-        print("    note:     SYCL builds require Intel oneAPI + Level Zero runtime")
+        print("    note:     SYCL is local-build only; use release/ or bin/ from GGML_SYCL=1 make")
     bins = ensure_binaries(cfg, force=args.force)
     print(f"    cli:    {bins.cli}")
     print(f"    server: {bins.server}")

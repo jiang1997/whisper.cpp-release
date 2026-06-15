@@ -8,7 +8,7 @@ Each release includes `whisper-cli` and `whisper-server`.
 
 | Platform | Arch | GPU backend |
 |----------|------|-------------|
-| Linux | x86_64 | Vulkan (default), SYCL (Intel) |
+| Linux | x86_64 | Vulkan (release), SYCL (local build) |
 | Windows | x86_64 | Vulkan |
 | macOS (Apple Silicon) | arm64 | CoreML |
 | macOS (Intel) | x86_64 | CPU only |
@@ -80,25 +80,20 @@ On WSL, the tool automatically prefers Windows `whisper-cli.exe` / `whisper-serv
 
 Force Linux binaries (CPU only): `WHISPER_TOOL_LINUX_BINARIES=1 ./bin/whisper-tool setup`
 
-### Intel GPU: SYCL backend (Linux x86_64)
+### Intel GPU: SYCL backend (local build)
 
-For Intel integrated/discrete GPUs, prebuilt **SYCL** binaries are also published as `linux-x64-sycl` releases. They use Intel oneAPI at runtime (Level Zero + MKL), so install the [Intel oneAPI DPC++/MKL components](https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit-download.html) and Level Zero driver on the target machine before use.
+SYCL is **not** built or published in GitHub Actions releases (the CI compile is too memory-heavy). Build locally on Intel CPU/GPU systems with oneAPI installed:
 
 ```bash
-# Download SYCL binaries instead of Vulkan
-./bin/whisper-tool setup --backend sycl
-
-# Or persist in config / environment
-export WHISPER_TOOL_GPU_BACKEND=sycl
-./bin/whisper-tool setup
-./bin/whisper-tool status   # gpu_backend: sycl, platform: linux-x64-sycl
+source /opt/intel/oneapi/setvars.sh   # or use Nix: nix shell nixpkgs#intel-oneapi-toolkit ...
+GGML_SYCL=1 make build
+GGML_SYCL=1 make release            # release/whisper-<version>-<arch>-sycl.tar.gz
 ```
 
-Build SYCL locally (requires `source /opt/intel/oneapi/setvars.sh` first):
+Then point whisper-tool at the local build (copy into `bin/`, or use a local `release/whisper-*-sycl/` directory). Runtime requires Intel oneAPI + Level Zero on the target machine.
 
 ```bash
-GGML_SYCL=1 make build
-GGML_SYCL=1 make release    # release/whisper-<version>-<arch>-sycl.tar.gz
+./bin/whisper-tool status   # discovers local release/whisper-*-sycl/ if present
 ```
 
 ### Commands
